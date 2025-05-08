@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Function to install AWS CLI on Linux
-install_awscli() {
-    echo "AWS CLI not found. Installing AWS CLI..."
+install_awscli_linux() {
+    echo "AWS CLI not found. Installing AWS CLI on Linux..."
     # Download the AWS CLI v2 installer
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 
@@ -16,12 +16,72 @@ install_awscli() {
     unzip awscliv2.zip
     sudo ./aws/install
     rm -rf aws awscliv2.zip
-    echo "AWS CLI installed successfully."
+    echo "AWS CLI installed successfully on Linux."
+}
+
+# Function to install AWS CLI on RHEL
+install_awscli_rhel() {
+    echo "AWS CLI not found. Installing AWS CLI on RHEL..."
+    # Download the AWS CLI v2 installer
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+
+    # Install unzip if not present
+    if ! command -v unzip &> /dev/null; then
+        echo "unzip not found. Installing unzip..."
+        sudo yum install -y unzip
+    fi
+
+    # Unzip and install AWS CLI
+    unzip awscliv2.zip
+    sudo ./aws/install
+    rm -rf aws awscliv2.zip
+    echo "AWS CLI installed successfully on RHEL."
+}
+
+# Function to install AWS CLI on macOS
+install_awscli_mac() {
+    echo "AWS CLI not found. Installing AWS CLI on macOS..."
+    # Install AWS CLI using Homebrew
+    brew install awscli
+    echo "AWS CLI installed successfully on macOS."
+}
+
+# Function to install AWS CLI on WSL (Windows Subsystem for Linux)
+install_awscli_wsl() {
+    echo "AWS CLI not found. Installing AWS CLI on WSL..."
+    # Install AWS CLI for Linux on WSL (similar to Linux)
+    install_awscli_linux
+}
+
+# Function to detect OS and install AWS CLI based on the OS
+install_awscli_based_on_os() {
+    OS="$(uname -s)"
+
+    case "$OS" in
+        Linux*)  # General Linux (Ubuntu, CentOS, etc.)
+            if grep -qi "rhel" /etc/os-release; then
+                install_awscli_rhel  # RHEL-specific installation
+            else
+                install_awscli_linux  # Other Linux distributions (e.g., Ubuntu, CentOS)
+            fi
+            ;;
+        Darwin*)  # macOS
+            install_awscli_mac
+            ;;
+        *)
+            if grep -qi "microsoft" /proc/version; then
+                install_awscli_wsl  # If it's WSL (Windows Subsystem for Linux)
+            else
+                echo "Unsupported OS: $OS. Please install AWS CLI manually."
+                exit 1
+            fi
+            ;;
+    esac
 }
 
 # Check if AWS CLI is installed
 if ! command -v aws &> /dev/null; then
-    install_awscli
+    install_awscli_based_on_os
 else
     echo "AWS CLI is already installed."
 fi
@@ -60,3 +120,7 @@ aws configure list
 # Output the current AWS user and region for verification
 echo "Current AWS Region: $(aws configure get region)"
 echo "Current AWS Access Key: $(aws configure get aws_access_key_id)"
+
+# Show the current AWS user or profile by calling the AWS STS API
+echo "Fetching current AWS user information..."
+aws sts get-caller-identity --query 'Arn' --output text
