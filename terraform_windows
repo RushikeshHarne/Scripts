@@ -1,0 +1,30 @@
+# PowerShell Script: setup.ps1 (Windows only)
+
+Write-Host "Detecting OS..."
+
+$OS_TYPE = "Windows"
+Write-Host "Detected OS: $OS_TYPE"
+
+# Install Git if not present
+Write-Host "Checking Git..."
+if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "Git not found. Installing via Chocolatey..."
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    choco install git -y --no-progress
+    Write-Host "Git installed."
+} else {
+    Write-Host "Git is already installed."
+}
+
+# Install Terraform if not present
+Write-Host "Checking Terraform..."
+if (!(Get-Command terraform -ErrorAction SilentlyContinue)) {
+    Write-Host "Terraform not found. Installing via Chocolatey..."
+    choco install terraform -y --no-progress
+    Write-Host "Terraform installed."
+} else {
+    Write-Host "Terraform is already installed."
+}
+
+Write-Host "All tools are installed and ready to use."
