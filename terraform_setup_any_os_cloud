@@ -1,0 +1,271 @@
+#!/bin/bash
+
+echo "Detecting OS..."
+
+OS_TYPE=""
+PKG_MANAGER=""
+
+# Detect OS
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [ -f /etc/debian_version ]; then
+        OS_TYPE="Debian/Ubuntu"
+        PKG_MANAGER="sudo apt"
+    elif [ -f /etc/redhat-release ]; then
+        OS_INFO=$(cat /etc/redhat-release)
+        if [[ "$OS_INFO" == *"Fedora"* ]]; then
+            OS_TYPE="Fedora"
+            PKG_MANAGER="sudo dnf"
+        elif [[ "$OS_INFO" == *"CentOS"* || "$OS_INFO" == *"Red Hat"* ]]; then
+            OS_TYPE="RHEL/CentOS"
+            PKG_MANAGER="sudo yum"
+        fi
+    fi
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    OS_TYPE="macOS"
+    PKG_MANAGER="brew"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+    OS_TYPE="Windows"
+else
+    echo "Unsupported OS: $OSTYPE"
+    exit 1
+fi
+
+echo "Detected OS: $OS_TYPE"
+
+# Install Git
+echo "Checking Git..."
+if ! command -v git &> /dev/null; then
+    if [[ "$OS_TYPE" == "Windows" ]]; then
+        powershell.exe -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+        powershell.exe -Command "choco install git -y --no-progress"
+    elif [[ "$OS_TYPE" == "macOS" ]]; then
+        if ! command -v brew &> /dev/null; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        fi
+        brew install git
+    else
+        $PKG_MANAGER update -y
+        $PKG_MANAGER install git -y
+    fi
+    echo "Git has been installed."
+else
+    echo "Git is already installed."
+fi
+
+# Install Terraform
+echo "Checking Terraform..."
+if ! command -v terraform &> /dev/null; then
+    VERSION="1.6.6"
+    if [[ "$OS_TYPE" == "Windows" ]]; then
+        powershell.exe -Command "choco install terraform -y --no-progress"
+    elif [[ "$OS_TYPE" == "macOS" ]]; then
+        brew tap hashicorp/tap
+        brew install hashicorp/tap/terraform
+    else
+        wget -q https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip -O terraform.zip
+        unzip -o terraform.zip
+        sudo mv terraform /usr/local/bin/
+        rm terraform.zip
+    fi
+    echo "Terraform has been installed."
+else
+    echo "Terraform is already installed."
+fi
+
+# Cloud CLI Selector
+echo "Select Cloud Provider for CLI setup:"
+echo "1) AWS"
+echo "2) Google Cloud (GCP)"
+echo "3) Microsoft Azure"
+echo "4) DigitalOcean"
+echo "5) Local (No CLI install)"
+read -p "Enter the number (1-5): " cloud_choice
+
+case $cloud_choice in
+    1)
+        echo "Checking AWS CLI..."
+        if ! command -v aws &> /dev/null; then
+            if [[ "$OS_TYPE" == "Windows" ]]; then
+                powershell.exe -Command "choco install awscli -y --no-progress"
+            elif [[ "$OS_TYPE" == "macOS" ]]; then
+                brew install awscli
+            else
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                sudo ./aws/install
+                rm -rf awscliv2.zip aws
+            fi
+            echo "AWS CLI has been installed."
+        else
+            echo "AWS CLI is already installed."
+        fi
+
+        # Prompt for AWS credentials and region
+        echo "Please enter your AWS Access Key ID:"
+        read AWS_ACCESS_KEY_ID
+
+        if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "Error: AWS Access Key ID is required. Exiting script."
+            exit 1
+        fi
+
+        echo "Please enter your AWS Secret Access Key:"
+        read AWS_SECRET_ACCESS_KEY
+
+        if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "Error: AWS Secret Access Key is required. Exiting script."
+            exit 1
+        fi
+
+        echo "Please enter the AWS Region (e.g., us-east-1, us-west-2):"
+        read AWS_REGION
+
+        # Configure AWS CLI with the provided values
+        aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
+        aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
+        aws configure set region "$AWS_REGION"
+
+        # Verify the configuration by displaying the current AWS CLI configuration
+        echo "AWS CLI has been configured with the following details:"
+        aws configure list
+
+        # Output the current AWS user and region for verification
+        echo "Current AWS Region: $(aws configure get region)"
+        echo "Current AWS Access Key: $(aws configure get aws_access_key_id)"
+
+        # Show the current AWS user or profile by calling the AWS STS API
+        echo "Fetching current AWS user information..."
+        aws sts get-caller-identity --query 'Arn' --output text
+        ;;
+    2)
+        echo "Checking Google Cloud SDK..."
+        if ! command -v gcloud &> /dev/null; then
+            if [[ "$OS_TYPE" == "Windows" ]]; then
+                powershell.exe -Command "choco install gcloudsdk -y --no-progress"
+            elif [[ "$OS_TYPE" == "macOS" ]]; then
+                brew install --cask google-cloud-sdk
+            else
+                echo "Adding Google Cloud SDK repo..."
+                echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+                curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+                $PKG_MANAGER update -y
+                $PKG_MANAGER install google-cloud-sdk -y
+            fi
+            echo "Google Cloud SDK has been installed."
+        else
+            echo "Google Cloud SDK is already installed."
+        fi
+
+        # Prompt for GCP credentials and project
+        echo "Please enter your Google Cloud Project ID:"
+        read GCP_PROJECT_ID
+if [ -z "$GCP_PROJECT_ID" ]; then
+            echo "Error: Google Cloud Project ID is required. Exiting script."
+            exit 1
+        fi
+
+        echo "Please enter your Google Cloud credentials file path (JSON):"
+        read GCP_CREDENTIALS_FILE
+
+        if [ -z "$GCP_CREDENTIALS_FILE" ]; then
+            echo "Error: GCP Credentials file is required. Exiting script."
+            exit 1
+        fi
+
+        # Configure GCP CLI with the provided values
+        gcloud auth activate-service-account --key-file="$GCP_CREDENTIALS_FILE"
+        gcloud config set project "$GCP_PROJECT_ID"
+
+        # Verify the configuration
+        echo "Google Cloud SDK has been configured with the following details:"
+        gcloud config list
+        ;;
+    3)
+        echo "Checking Azure CLI..."
+        if ! command -v az &> /dev/null; then
+            if [[ "$OS_TYPE" == "Windows" ]]; then
+                powershell.exe -Command "choco install azure-cli -y --no-progress"
+            elif [[ "$OS_TYPE" == "macOS" ]]; then
+                brew install azure-cli
+            else
+                curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+            fi
+            echo "Azure CLI has been installed."
+        else
+            echo "Azure CLI is already installed."
+        fi
+
+        # Prompt for Azure credentials and region
+        echo "Please enter your Azure Subscription ID:"
+        read AZURE_SUBSCRIPTION_ID
+
+        if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "Error: Azure Subscription ID is required. Exiting script."
+            exit 1
+        fi
+
+        echo "Please enter your Azure Tenant ID:"
+        read AZURE_TENANT_ID
+
+        if [ -z "$AZURE_TENANT_ID" ]; then
+            echo "Error: Azure Tenant ID is required. Exiting script."
+            exit 1
+        fi
+
+        # Configure Azure CLI with the provided values
+        az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+        az account set --tenant "$AZURE_TENANT_ID"
+
+        # Verify the configuration
+        echo "Azure CLI has been configured with the following details:"
+        az account show
+        ;;
+    4)
+        echo "Checking DigitalOcean CLI (doctl)..."
+        if ! command -v doctl &> /dev/null; then
+            if [[ "$OS_TYPE" == "Windows" ]]; then
+                powershell.exe -Command "choco install doctl -y --no-progress"
+            elif [[ "$OS_TYPE" == "macOS" ]]; then
+                brew install doctl
+            else
+                curl -sL https://github.com/digitalocean/doctl/releases/download/v1.100.0/doctl-1.100.0-linux-amd64.tar.gz | tar xz
+                sudo mv doctl /usr/local/bin
+            fi
+            echo "DigitalOcean CLI (doctl) has been installed."
+        else
+            echo "DigitalOcean CLI"
+        fi
+        # Prompt for DigitalOcean API token
+        echo "Please enter your DigitalOcean API Token:"
+        read DO_API_TOKEN
+
+        if [ -z "$DO_API_TOKEN" ]; then
+            echo "Error: DigitalOcean API Token is required. Exiting script."
+            exit 1
+        fi
+
+        # Configure DigitalOcean CLI with the provided token
+        doctl auth init -t "$DO_API_TOKEN"
+
+        # Verify the configuration
+        echo "DigitalOcean CLI has been configured with the following details:"
+        doctl account get
+        ;;
+
+    5)
+        echo "No cloud CLI will be installed. Exiting."
+        exit 0
+        ;;
+    *)
+        echo "Invalid choice. Exiting script."
+        exit 1
+        ;;
+
+esac
+
+echo "Cloud CLI setup complete!"
+
+
+
+
+
