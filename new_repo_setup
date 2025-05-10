@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# Colors
+success() { echo -e "\e[32m$1\e[0m"; }
+error() { echo -e "\e[31m$1\e[0m"; }
+
+# --- INPUT SECTION ---
+read -p "Enter your GitHub username: " GIT_USER
+read -p "Enter your GitHub email: " GIT_EMAIL
+read -s -p "Enter your GitHub Personal Access Token (PAT): " TOKEN
+echo
+read -p "Enter new repository name: " REPO_NAME
+read -p "Enter repository description (optional): " DESCRIPTION
+read -p "Should the repo be private? (yes/no): " PRIVATE_CHOICE
+
+PRIVATE_FLAG="false"
+if [[ "$PRIVATE_CHOICE" =~ ^[Yy] ]]; then
+    PRIVATE_FLAG="true"
+fi
+
+# --- CREATE REPO ON GITHUB ---
+REPO_CREATE_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -u "$GIT_USER:$TOKEN" https://api.github.com/user/repos -d "{
+  \"name\": \"$REPO_NAME\",
+  \"description\": \"$DESCRIPTION\",
+  \"private\": $PRIVATE_FLAG
+}")
+
+if [ "$REPO_CREATE_RESPONSE" -eq 201 ]; then
+    success "✅ GitHub repository '$REPO_NAME' created successfully."
+else
+    error "❌ Failed to create GitHub repo. Status code: $REPO_CREATE_RESPONSE"
+    exit 1
+fi
+
+# --- SETUP LOCAL PROJECT ---
+mkdir "$REPO_NAME" && cd "$REPO_NAME" || exit 1
+git init
+git config user.name "$GIT_USER"
+git config user.email "$GIT_EMAIL"
+
+echo "# $REPO_NAME" > README.md
+
+git add .
+git commit -m "Initial commit"
+git branch -M main
+
+REMOTE_URL="https://$GIT_USER:$TOKEN@github.com/$GIT_USER/$REPO_NAME.git"
+git remote add origin "$REMOTE_URL"
+git push -u origin main
+
+# --- CREATE HELPER PUSH SCRIPT ---
+cat > push.sh <<EOF
+#!/bin/bash
+read -p "Enter commit message: " MSG
+git add .
+git commit -m "\$MSG"
+git push
+EOF
+
+chmod +x push.sh
+
+success "🎉 All done! Repo created and code pushed: https://github.com/$GIT_USER/$REPO_NAME"
+success "🛠 You're now in the '$REPO_NAME' directory."
+success "➡️  Use './push.sh' to easily commit and push future changes!"
