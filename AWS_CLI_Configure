@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Installs & configures AWS CLI based on your OS and credentials.  
+# Checks for Terraform and installs it if not present.  
+# Prepares both tools for immediate cloud infrastructure use.
+
+
 # ====== AWS CLI INSTALLATION FUNCTIONS ======
 install_awscli_linux() {
     echo "Installing AWS CLI on Linux..."
