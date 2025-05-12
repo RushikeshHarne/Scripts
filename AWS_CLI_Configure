@@ -1,126 +1,133 @@
 #!/bin/bash
 
-# Function to install AWS CLI on Linux
+# ====== AWS CLI INSTALLATION FUNCTIONS ======
 install_awscli_linux() {
-    echo "AWS CLI not found. Installing AWS CLI on Linux..."
-    # Download the AWS CLI v2 installer
+    echo "Installing AWS CLI on Linux..."
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-
-    # Install unzip if not present
     if ! command -v unzip &> /dev/null; then
-        echo "unzip not found. Installing unzip..."
+        echo "Installing unzip..."
         sudo apt-get update && sudo apt-get install -y unzip
     fi
-
-    # Unzip and install AWS CLI
     unzip awscliv2.zip
     sudo ./aws/install
     rm -rf aws awscliv2.zip
-    echo "AWS CLI installed successfully on Linux."
+    echo "✅ AWS CLI installed on Linux."
 }
 
-# Function to install AWS CLI on RHEL
 install_awscli_rhel() {
-    echo "AWS CLI not found. Installing AWS CLI on RHEL..."
-    # Download the AWS CLI v2 installer
+    echo "Installing AWS CLI on RHEL..."
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-
-    # Install unzip if not present
     if ! command -v unzip &> /dev/null; then
-        echo "unzip not found. Installing unzip..."
+        echo "Installing unzip..."
         sudo yum install -y unzip
     fi
-
-    # Unzip and install AWS CLI
     unzip awscliv2.zip
     sudo ./aws/install
     rm -rf aws awscliv2.zip
-    echo "AWS CLI installed successfully on RHEL."
+    echo "✅ AWS CLI installed on RHEL."
 }
 
-# Function to install AWS CLI on macOS
 install_awscli_mac() {
-    echo "AWS CLI not found. Installing AWS CLI on macOS..."
-    # Install AWS CLI using Homebrew
+    echo "Installing AWS CLI on macOS..."
     brew install awscli
-    echo "AWS CLI installed successfully on macOS."
+    echo "✅ AWS CLI installed on macOS."
 }
 
-# Function to install AWS CLI on WSL (Windows Subsystem for Linux)
 install_awscli_wsl() {
-    echo "AWS CLI not found. Installing AWS CLI on WSL..."
-    # Install AWS CLI for Linux on WSL (similar to Linux)
+    echo "Installing AWS CLI on WSL..."
     install_awscli_linux
 }
 
-# Function to detect OS and install AWS CLI based on the OS
 install_awscli_based_on_os() {
     OS="$(uname -s)"
-
     case "$OS" in
-        Linux*)  # General Linux (Ubuntu, CentOS, etc.)
+        Linux*)
             if grep -qi "rhel" /etc/os-release; then
-                install_awscli_rhel  # RHEL-specific installation
+                install_awscli_rhel
             else
-                install_awscli_linux  # Other Linux distributions (e.g., Ubuntu, CentOS)
+                install_awscli_linux
             fi
             ;;
-        Darwin*)  # macOS
+        Darwin*)
             install_awscli_mac
             ;;
         *)
             if grep -qi "microsoft" /proc/version; then
-                install_awscli_wsl  # If it's WSL (Windows Subsystem for Linux)
+                install_awscli_wsl
             else
-                echo "Unsupported OS: $OS. Please install AWS CLI manually."
+                echo "❌ Unsupported OS. Install AWS CLI manually."
                 exit 1
             fi
             ;;
     esac
 }
 
-# Check if AWS CLI is installed
+# ====== CHECK AWS CLI AND INSTALL IF NEEDED ======
 if ! command -v aws &> /dev/null; then
     install_awscli_based_on_os
 else
-    echo "AWS CLI is already installed."
+    echo "✅ AWS CLI already installed."
 fi
 
-# Prompt for AWS credentials and region
-echo "Please enter your AWS Access Key ID:"
+# ====== CONFIGURE AWS CLI ======
+echo "Enter your AWS Access Key ID:"
 read AWS_ACCESS_KEY_ID
+[ -z "$AWS_ACCESS_KEY_ID" ] && echo "Access Key ID is required. Exiting." && exit 1
 
-# Validate if input is provided
-if [ -z "$AWS_ACCESS_KEY_ID" ]; then
-    echo "Error: AWS Access Key ID is required. Exiting script."
-    exit 1
-fi
-
-echo "Please enter your AWS Secret Access Key:"
+echo "Enter your AWS Secret Access Key:"
 read AWS_SECRET_ACCESS_KEY
+[ -z "$AWS_SECRET_ACCESS_KEY" ] && echo "Secret Access Key is required. Exiting." && exit 1
 
-# Validate if input is provided
-if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-    echo "Error: AWS Secret Access Key is required. Exiting script."
-    exit 1
-fi
-
-echo "Please enter the AWS Region (e.g., us-east-1, us-west-2):"
+echo "Enter your AWS Region (e.g., us-east-1):"
 read AWS_REGION
+[ -z "$AWS_REGION" ] && echo "Region is required. Exiting." && exit 1
 
-# Configure AWS CLI with the provided values
 aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
 aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
 aws configure set region "$AWS_REGION"
 
-# Verify the configuration by displaying the current AWS CLI configuration
-echo "AWS CLI has been configured with the following details:"
+echo "✅ AWS CLI configured:"
 aws configure list
+echo "Logged in as: $(aws sts get-caller-identity --query 'Arn' --output text)"
 
-# Output the current AWS user and region for verification
-echo "Current AWS Region: $(aws configure get region)"
-echo "Current AWS Access Key: $(aws configure get aws_access_key_id)"
+# ====== CHECK IF TERRAFORM IS ALREADY INSTALLED ======
+if command -v terraform &> /dev/null; then
+    echo "✅ Terraform is already installed. Version: $(terraform version)"
+else
+    # ====== TERRAFORM INSTALLATION FUNCTION ======
+    install_terraform() {
+        TERRAFORM_VERSION="1.7.5"
+        OS="$(uname -s)"
 
-# Show the current AWS user or profile by calling the AWS STS API
-echo "Fetching current AWS user information..."
-aws sts get-caller-identity --query 'Arn' --output text
+        if [[ "$OS" == "Linux" ]]; then
+            if grep -qi "rhel" /etc/os-release; then
+                echo "Installing Terraform on RHEL..."
+                sudo yum install -y wget unzip
+            else
+                echo "Installing Terraform on Ubuntu/Linux..."
+                sudo apt-get update && sudo apt-get install -y wget unzip
+            fi
+            wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+            unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+            sudo mv terraform /usr/local/bin/
+            rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+            echo "✅ Terraform installed: $(terraform version)"
+        elif [[ "$OS" == "Darwin" ]]; then
+            echo "Installing Terraform on macOS..."
+            brew tap hashicorp/tap
+            brew install hashicorp/tap/terraform
+            echo "✅ Terraform installed: $(terraform version)"
+        else
+            echo "❌ Unsupported OS for Terraform installation."
+        fi
+    }
+
+    # ====== PROMPT FOR TERRAFORM INSTALL ======
+    echo ""
+    read -p "Do you want to install Terraform now? (yes/no): " INSTALL_TF
+    if [[ "$INSTALL_TF" == "yes" ]]; then
+        install_terraform
+    else
+        echo "Terraform installation skipped."
+    fi
+fi
