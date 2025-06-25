@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Ask user for tag name value
+read -p "Enter the EC2 instance tag Name to delete: " TAG_NAME
+
+# Find instance IDs with that tag
+INSTANCE_IDS=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$TAG_NAME" "Name=instance-state-name,Values=running,stopped" \
+  --query "Reservations[].Instances[].InstanceId" \
+  --output text)
+
+# Check if any instances found
+if [ -z "$INSTANCE_IDS" ]; then
+  echo "❌ No instances found with tag Name=$TAG_NAME."
+  exit 1
+fi
+
+# Show the instances to be deleted
+echo "🛑 Instance(s) to be terminated: $INSTANCE_IDS"
+
+# Confirm with user
+read -p "Are you sure you want to terminate these instance(s)? (yes/no): " CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+  echo "❎ Termination cancelled."
+  exit 0
+fi
+
+# Terminate the instances
+aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
+
+echo "✅ Termination command sent for instance(s): $INSTANCE_IDS"
