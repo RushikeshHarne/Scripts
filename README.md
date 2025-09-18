@@ -42,3 +42,8 @@ For a .bat version of the script, execute it using:
 script.bat
 or
 double-click the script.bat file in File Explorer.
+
+gemini-cli-setup.sh
+chmod +x setup-gemini-cli.sh
+./setup-gemini-cli.sh
+
